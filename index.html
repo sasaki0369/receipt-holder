@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>レシートホルダー</title>
+<link rel="manifest" href="data:application/manifest+json,{%22name%22:%22%E3%83%AC%E3%82%B7%E3%83%BC%E3%83%88%E3%83%9B%E3%83%AB%E3%83%80%E3%83%BC%22,%22short_name%22:%22%E3%83%AC%E3%82%B7%E3%83%BC%E3%83%88%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23FBF6EC%22,%22theme_color%22:%22%23B4432C%22}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='14' fill='%23FBF6EC'/%3E%3Cpath d='M25 12h50v72l-8-6-8 6-8-6-8 6-8-6-8 6-8-6z' fill='%23fff' stroke='%233A322A' stroke-width='3'/%3E%3Cline x1='34' y1='30' x2='66' y2='30' stroke='%233A322A' stroke-width='3'/%3E%3Cline x1='34' y1='40' x2='66' y2='40' stroke='%233A322A' stroke-width='3'/%3E%3Cline x1='34' y1='50' x2='58' y2='50' stroke='%233A322A' stroke-width='3'/%3E%3Ccircle cx='72' cy='66' r='16' fill='none' stroke='%23B4432C' stroke-width='3'/%3E%3Ctext x='72' y='71' font-size='13' text-anchor='middle' fill='%23B4432C' font-family='sans-serif'%3E済%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23FBF6EC'/%3E%3Cpath d='M25 12h50v72l-8-6-8 6-8-6-8 6-8-6-8 6-8-6z' fill='%23fff' stroke='%233A322A' stroke-width='3'/%3E%3Cline x1='34' y1='30' x2='66' y2='30' stroke='%233A322A' stroke-width='3'/%3E%3Cline x1='34' y1='40' x2='66' y2='40' stroke='%233A322A' stroke-width='3'/%3E%3Ccircle cx='72' cy='66' r='16' fill='none' stroke='%23B4432C' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DotGothic16&display=swap" rel="stylesheet">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<style>
+:root{
+  --paper:#FBF6EC;
+  --card:#FFFDF8;
+  --ink:#3A322A;
+  --ink-soft:#8A7F6E;
+  --stamp-red:#B4432C;
+  --stamp-navy:#2E5E7C;
+  --line:#E4DBC8;
+  --shadow: 0 2px 10px rgba(58,50,42,0.08);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0; padding:0; background:var(--paper); color:var(--ink); font-family:'Zen Kaku Gothic New', sans-serif; -webkit-font-smoothing:antialiased;}
+body{
+  min-height:100vh; min-height:100dvh; padding-bottom:76px;
+  background-image:
+    radial-gradient(circle at 15% 8%, rgba(180,67,44,0.04), transparent 40%),
+    repeating-linear-gradient(0deg, transparent, transparent 38px, rgba(58,50,42,0.025) 39px);
+}
+h1,h2,h3{font-family:'Shippori Mincho', serif; margin:0; font-weight:700;}
+.num{font-family:'DotGothic16', monospace;}
+button{font-family:inherit; cursor:pointer;}
+a{color:inherit;}
+
+/* header */
+.app-header{
+  position:sticky; top:0; z-index:20;
+  background:var(--paper); padding:16px 18px 10px;
+  border-bottom:1px solid var(--line);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.app-header .brand{display:flex; align-items:center; gap:8px;}
+.app-header .brand .mark{
+  width:30px; height:30px; border-radius:50%; border:2px solid var(--stamp-red); color:var(--stamp-red);
+  display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; transform:rotate(-8deg);
+}
+.app-header h1{font-size:19px; letter-spacing:.04em;}
+.user-chip{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-soft);}
+.user-chip img{width:26px; height:26px; border-radius:50%; border:1px solid var(--line);}
+.icon-btn{background:none; border:none; color:var(--ink-soft); font-size:20px; padding:4px;}
+
+main{max-width:560px; margin:0 auto; padding:16px 14px 20px;}
+.screen{display:none;}
+.screen.active{display:block; animation:fadeIn .25s ease;}
+@keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+/* login */
+.login-wrap{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:70vh; text-align:center; gap:18px; padding:0 20px;}
+.login-wrap .mark-big{
+  width:76px; height:76px; border-radius:50%; border:3px solid var(--stamp-red); color:var(--stamp-red);
+  display:flex; align-items:center; justify-content:center; font-family:'Shippori Mincho',serif; font-size:15px; font-weight:700;
+  transform:rotate(-6deg);
+}
+.login-wrap p{color:var(--ink-soft); font-size:13.5px; line-height:1.7; max-width:320px;}
+.google-btn{
+  display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--line); border-radius:10px;
+  padding:12px 22px; font-size:14.5px; font-weight:600; box-shadow:var(--shadow);
+}
+.google-btn svg{width:18px; height:18px;}
+
+/* stamp card / receipt slip */
+.slip{
+  background:var(--card); border:1px solid var(--line); border-radius:6px; padding:14px 14px 12px; margin-bottom:12px;
+  box-shadow:var(--shadow); position:relative; overflow:hidden;
+}
+.slip::before{
+  content:""; position:absolute; left:0; right:0; bottom:-1px; height:9px;
+  background-image: radial-gradient(circle at 8px 0, transparent 6px, var(--paper) 6.5px);
+  background-size:16px 10px; background-repeat:repeat-x;
+}
+.slip-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+.slip-store{font-weight:700; font-size:15px;}
+.slip-date{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+.slip-amount{font-family:'DotGothic16',monospace; font-size:20px; font-weight:400; white-space:nowrap;}
+.slip-memo{font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.5;}
+.stamp-tag{
+  display:inline-flex; align-items:center; gap:4px; margin-top:8px; font-size:11px; font-weight:700;
+  border:1.5px solid; border-radius:20px; padding:2px 10px; transform:rotate(-2deg);
+}
+.slip-photo-thumb{width:44px; height:44px; border-radius:4px; object-fit:cover; border:1px solid var(--line); flex-shrink:0;}
+.slip-row{display:flex; gap:10px; align-items:center;}
+
+/* list controls */
+.filter-bar{display:flex; gap:8px; overflow-x:auto; padding:2px 0 12px; scrollbar-width:none;}
+.filter-bar::-webkit-scrollbar{display:none;}
+.chip{
+  flex-shrink:0; font-size:12.5px; padding:6px 13px; border-radius:20px; border:1.5px solid var(--line); color:var(--ink-soft); background:#fff;
+  font-weight:500;
+}
+.chip.active{background:var(--ink); color:#fff; border-color:var(--ink);}
+.month-nav{display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:10px;}
+.month-nav button{background:none; border:none; font-size:17px; color:var(--ink-soft); padding:4px 10px;}
+.month-nav .m-label{font-family:'Shippori Mincho',serif; font-size:16px; font-weight:700;}
+.summary-strip{display:flex; justify-content:space-between; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 16px; margin-bottom:14px;}
+.summary-strip div{text-align:center;}
+.summary-strip .lbl{font-size:10.5px; color:var(--ink-soft);}
+.summary-strip .val{font-family:'DotGothic16',monospace; font-size:18px; margin-top:2px;}
+
+.empty{text-align:center; padding:60px 20px; color:var(--ink-soft);}
+.empty .mark-big{margin:0 auto 14px;}
+
+/* FAB */
+.fab{
+  position:fixed; right:20px; bottom:88px; width:56px; height:56px; border-radius:50%;
+  background:var(--stamp-red); color:#fff; border:none; font-size:26px; box-shadow:0 4px 14px rgba(180,67,44,0.4);
+  display:flex; align-items:center; justify-content:center; z-index:30;
+}
+
+/* bottom nav */
+.bottom-nav{
+  position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--line);
+  display:flex; z-index:25; padding-bottom:env(safe-area-inset-bottom);
+}
+.bottom-nav button{
+  flex:1; background:none; border:none; padding:9px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:3px;
+  color:var(--ink-soft); font-size:10.5px;
+}
+.bottom-nav button.active{color:var(--stamp-red);}
+.bottom-nav svg{width:20px; height:20px;}
+
+/* form */
+.form-card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; box-shadow:var(--shadow);}
+.field{margin-bottom:16px;}
+.field label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:6px; font-weight:500;}
+.field input[type=text], .field input[type=number], .field input[type=date], .field textarea, .field select{
+  width:100%; border:1px solid var(--line); border-radius:8px; padding:11px 12px; font-size:15px; font-family:inherit;
+  background:#fff; color:var(--ink);
+}
+.field textarea{resize:vertical; min-height:60px;}
+.amount-input{font-family:'DotGothic16',monospace; font-size:22px !important;}
+.cat-picker{display:flex; gap:8px; flex-wrap:wrap;}
+.cat-opt{
+  border:2px solid var(--line); border-radius:20px; padding:7px 15px; font-size:13px; font-weight:600; background:#fff; color:var(--ink-soft);
+}
+.cat-opt.sel{color:#fff;}
+.photo-zone{
+  border:2px dashed var(--line); border-radius:10px; padding:16px; text-align:center; color:var(--ink-soft); font-size:13px;
+  position:relative; overflow:hidden; min-height:80px; display:flex; align-items:center; justify-content:center;
+}
+.photo-zone img{max-width:100%; max-height:220px; border-radius:6px; display:block;}
+.photo-zone input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer;}
+.btn-row{display:flex; gap:10px; margin-top:6px;}
+.btn{flex:1; border:none; border-radius:8px; padding:13px; font-size:14.5px; font-weight:700;}
+.btn-primary{background:var(--stamp-red); color:#fff;}
+.btn-ghost{background:#fff; border:1px solid var(--line); color:var(--ink-soft);}
+.btn-danger{background:#fff; border:1px solid var(--stamp-red); color:var(--stamp-red);}
+
+/* category admin */
+.cat-row{display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:8px;}
+.cat-dot{width:16px; height:16px; border-radius:50%; flex-shrink:0;}
+.cat-row .cname{flex:1; font-size:14px; font-weight:600;}
+.cat-row.inactive{opacity:.45;}
+.cat-row button{background:none; border:none; color:var(--ink-soft); font-size:16px;}
+.color-swatches{display:flex; gap:8px; flex-wrap:wrap;}
+.swatch{width:28px; height:28px; border-radius:50%; border:2px solid transparent;}
+.swatch.sel{border-color:var(--ink);}
+
+/* aggregation */
+.agg-table-wrap{overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:10px;}
+table.agg{border-collapse:collapse; width:100%; font-size:12.5px;}
+table.agg th, table.agg td{padding:9px 12px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--line);}
+table.agg th{font-family:'Shippori Mincho',serif; font-weight:700; text-align:right; background:#F4EEDD; position:sticky; top:0;}
+table.agg th:first-child, table.agg td:first-child{text-align:left; position:sticky; left:0; background:inherit;}
+table.agg td.num, table.agg th.num{font-family:'DotGothic16',monospace;}
+table.agg tr.total-row td{font-weight:700; background:#F4EEDD;}
+table.agg td.total-col{font-weight:700;}
+.year-nav{display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:14px;}
+.year-nav button{background:none; border:none; font-size:17px; color:var(--ink-soft);}
+.year-nav .y-label{font-family:'Shippori Mincho',serif; font-size:17px; font-weight:700;}
+
+.section-title{font-size:15px; margin-bottom:10px; letter-spacing:.03em;}
+.hint{font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.6;}
+.toast{
+  position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:13px;
+  padding:10px 20px; border-radius:20px; z-index:60; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .2s;
+}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="screen">
+  <div class="login-wrap">
+    <div class="mark-big">領収<br>済</div>
+    <h1 style="font-size:22px;">レシートホルダー</h1>
+    <p>レシートや領収証を撮影して記録。仕事・プライベートで分類し、月別の集計もひと目で確認できます。</p>
+    <button class="google-btn" id="googleLoginBtn">
+      <svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4c-7.4 0-13.8 4.1-17.1 10.1z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-1.9 14.3-5.1l-6.6-5.4C29.6 35.4 26.9 36.2 24 36.2c-5.3 0-9.7-3.1-11.3-7.5l-6.6 5.1C9.9 39.9 16.4 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.6 5.4C41.4 35.4 44 30.1 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+      Googleでログイン
+    </button>
+  </div>
+</div>
+
+<div id="mainWrap" style="display:none;">
+  <header class="app-header">
+    <div class="brand">
+      <div class="mark">済</div>
+      <h1 id="headerTitle">レシート一覧</h1>
+    </div>
+    <div class="user-chip">
+      <img id="userPhoto" src="" alt="">
+      <button class="icon-btn" id="logoutBtn" title="ログアウト">⎋</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 一覧 -->
+    <section id="listScreen" class="screen active">
+      <div class="month-nav">
+        <button id="prevMonth">‹</button>
+        <div class="m-label" id="monthLabel">2026年8月</div>
+        <button id="nextMonth">›</button>
+      </div>
+      <div class="summary-strip">
+        <div><div class="lbl">件数</div><div class="val" id="sumCount">0</div></div>
+        <div><div class="lbl">合計金額</div><div class="val" id="sumAmount">¥0</div></div>
+      </div>
+      <div class="filter-bar" id="catFilterBar"></div>
+      <div id="receiptList"></div>
+      <div id="emptyState" class="empty" style="display:none;">
+        <div class="mark-big" style="width:56px;height:56px;font-size:11px;">記録<br>なし</div>
+        右下のボタンからレシートを登録しましょう
+      </div>
+    </section>
+
+    <!-- 新規/編集 -->
+    <section id="formScreen" class="screen">
+      <h2 class="section-title" id="formTitle">レシートを登録</h2>
+      <div class="form-card">
+        <div class="field">
+          <label>写真</label>
+          <div class="photo-zone" id="photoZone">
+            <span id="photoZoneText">タップして撮影・選択</span>
+            <img id="photoPreview" style="display:none;">
+            <input type="file" id="photoInput" accept="image/*" capture="environment">
+          </div>
+        </div>
+        <div class="field">
+          <label>購入日</label>
+          <input type="date" id="fDate">
+        </div>
+        <div class="field">
+          <label>店舗名・支払先</label>
+          <input type="text" id="fStore" placeholder="例）〇〇文具店">
+        </div>
+        <div class="field">
+          <label>金額</label>
+          <input type="number" id="fAmount" class="amount-input" placeholder="0" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>分類</label>
+          <div class="cat-picker" id="fCatPicker"></div>
+        </div>
+        <div class="field">
+          <label>メモ</label>
+          <textarea id="fMemo" placeholder="用途、品目、経費申請メモなど"></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="formCancelBtn">キャンセル</button>
+          <button class="btn btn-primary" id="formSaveBtn">保存する</button>
+        </div>
+        <div class="btn-row" id="formDeleteRow" style="display:none;">
+          <button class="btn btn-danger" id="formDeleteBtn">この記録を削除</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 集計 -->
+    <section id="aggScreen" class="screen">
+      <h2 class="section-title">月別×分類の集計</h2>
+      <div class="year-nav">
+        <button id="prevYear">‹</button>
+        <div class="y-label" id="yearLabel">2026年</div>
+        <button id="nextYear">›</button>
+      </div>
+      <div class="agg-table-wrap">
+        <table class="agg" id="aggTable"></table>
+      </div>
+      <p class="hint">「合計」列・行はそれぞれの年間・月間合計です。表の数値をタップすると該当月・分類の一覧に移動します。</p>
+    </section>
+
+    <!-- 管理（分類管理） -->
+    <section id="adminScreen" class="screen">
+      <h2 class="section-title">分類の管理</h2>
+      <div id="catAdminList"></div>
+      <div class="form-card" style="margin-top:16px;">
+        <div class="field">
+          <label>分類名</label>
+          <input type="text" id="newCatName" placeholder="例）出張">
+        </div>
+        <div class="field">
+          <label>色</label>
+          <div class="color-swatches" id="colorSwatches"></div>
+        </div>
+        <button class="btn btn-primary" id="addCatBtn" style="width:100%;">分類を追加</button>
+      </div>
+      <p class="hint">分類を無効化しても、過去の記録には影響しません。一覧の分類選択肢から非表示になるだけです。</p>
+    </section>
+  </main>
+
+  <button class="fab" id="fabAdd">＋</button>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-screen="listScreen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l3 3v15H6z"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+      一覧
+    </button>
+    <button class="nav-btn" data-screen="aggScreen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+      集計
+    </button>
+    <button class="nav-btn" data-screen="adminScreen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09c0 .68.4 1.28 1 1.51.31.13.65.13.98.02A1.65 1.65 0 0017.6 4l.06-.06a2 2 0 112.83 2.83l-.06.06c-.5.5-.65 1.24-.33 1.82.23.6.83 1 1.51 1H21a2 2 0 010 4h-.09c-.68 0-1.28.4-1.51 1z"/></svg>
+      管理
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   Firebase 初期化
+   ※ life--log プロジェクト内の receipt-holder アプリの
+      設定値に置き換えてください（Firebaseコンソール＞プロジェクトの設定）
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAxVn7JUuoBsNeSODksNYyEkd2W2E252_c",
+  authDomain: "life--log.firebaseapp.com",
+  databaseURL: "https://life--log-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "life--log",
+  storageBucket: "life--log.firebasestorage.app",
+  messagingSenderId: "790653257684",
+  appId: "1:790653257684:web:f6317e8e0faf5d478f3841"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+const ROOT = 'receiptphoto'; // 既存プロジェクトに合わせたデータノード名
+
+let currentUser = null;
+let categories = [];        // {id,name,color,active,order}
+let receipts = [];          // 当月分キャッシュ
+let allYearReceipts = [];   // 集計年キャッシュ
+let viewMonth = new Date(); viewMonth.setDate(1);
+let viewYear = new Date().getFullYear();
+let activeFilterCat = 'all';
+let editingId = null;
+let pendingPhotoFile = null;
+let pendingPhotoDataUrl = null;
+
+const PALETTE = ['#B4432C','#2E5E7C','#7A8450','#9C6B3E','#7D5A8C','#3E7C6B','#B47C2C','#5E6B7C'];
+
+/* ---------- 認証 ---------- */
+document.getElementById('googleLoginBtn').onclick = () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(e => showToast('ログインに失敗しました'));
+};
+document.getElementById('logoutBtn').onclick = () => auth.signOut();
+
+auth.onAuthStateChanged(async user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('loginScreen').classList.remove('active');
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainWrap').style.display = 'block';
+    document.getElementById('userPhoto').src = user.photoURL || '';
+    await ensureDefaultCategories();
+    listenCategories();
+    loadMonth();
+  } else {
+    currentUser = null;
+    document.getElementById('loginScreen').style.display = 'block';
+    document.getElementById('loginScreen').classList.add('active');
+    document.getElementById('mainWrap').style.display = 'none';
+  }
+});
+
+/* ---------- 分類（管理画面で追加・修正可能） ---------- */
+function catRef(id){ return id ? db.ref(`${ROOT}/categories/${id}`) : db.ref(`${ROOT}/categories`); }
+function recRef(id){ return id ? db.ref(`${ROOT}/receipts/${id}`) : db.ref(`${ROOT}/receipts`); }
+
+async function ensureDefaultCategories(){
+  const snap = await catRef().get();
+  if (!snap.exists()) {
+    const c1 = catRef().push();
+    await c1.set({name:'仕事', color:'#2E5E7C', active:true, order:0});
+    const c2 = catRef().push();
+    await c2.set({name:'プライベート', color:'#B4432C', active:true, order:1});
+  }
+}
+
+function listenCategories(){
+  catRef().on('value', snap => {
+    const val = snap.val() || {};
+    categories = Object.entries(val)
+      .map(([id, v]) => ({id, ...v}))
+      .sort((a,b) => (a.order||0) - (b.order||0));
+    renderCatFilterBar();
+    renderCatPicker();
+    renderCatAdmin();
+    renderAgg();
+  });
+}
+
+function catById(id){ return categories.find(c => c.id === id); }
+
+function renderCatFilterBar(){
+  const bar = document.getElementById('catFilterBar');
+  bar.innerHTML = '';
+  const allChip = document.createElement('button');
+  allChip.className = 'chip' + (activeFilterCat==='all' ? ' active':'');
+  allChip.textContent = 'すべて';
+  allChip.onclick = () => { activeFilterCat='all'; renderCatFilterBar(); renderList(); };
+  bar.appendChild(allChip);
+  categories.filter(c=>c.active).forEach(c => {
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (activeFilterCat===c.id ? ' active':'');
+    chip.textContent = c.name;
+    chip.onclick = () => { activeFilterCat=c.id; renderCatFilterBar(); renderList(); };
+    bar.appendChild(chip);
+  });
+}
+
+function renderCatPicker(){
+  const wrap = document.getElementById('fCatPicker');
+  wrap.innerHTML = '';
+  categories.filter(c=>c.active).forEach(c => {
+    const b = document.createElement('button');
+    b.type='button';
+    b.className='cat-opt';
+    b.textContent = c.name;
+    b.dataset.id = c.id;
+    b.style.borderColor = c.color;
+    b.onclick = () => {
+      wrap.querySelectorAll('.cat-opt').forEach(o=>{o.classList.remove('sel'); o.style.background='#fff'; o.style.color=o.style.borderColor;});
+      b.classList.add('sel'); b.style.background = c.color; b.style.color = '#fff';
+      wrap.dataset.selected = c.id;
+    };
+    wrap.appendChild(b);
+  });
+}
+
+/* ---- 分類 管理画面 ---- */
+function renderCatAdmin(){
+  const list = document.getElementById('catAdminList');
+  list.innerHTML = '';
+  categories.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'cat-row' + (c.active ? '' : ' inactive');
+    row.innerHTML = `
+      <div class="cat-dot" style="background:${c.color}"></div>
+      <div class="cname">${escapeHtml(c.name)}</div>
+      <button data-act="edit">編集</button>
+      <button data-act="toggle">${c.active ? '無効化':'有効化'}</button>
+    `;
+    row.querySelector('[data-act=edit]').onclick = () => editCategory(c);
+    row.querySelector('[data-act=toggle]').onclick = () => catRef(c.id).update({active: !c.active});
+    list.appendChild(row);
+  });
+  const sw = document.getElementById('colorSwatches');
+  if (!sw.dataset.built) {
+    PALETTE.forEach((color,i) => {
+      const s = document.createElement('button');
+      s.type='button'; s.className='swatch' + (i===0?' sel':'');
+      s.style.background = color; s.dataset.color = color;
+      s.onclick = () => { sw.querySelectorAll('.swatch').forEach(x=>x.classList.remove('sel')); s.classList.add('sel'); sw.dataset.selected = color; };
+      sw.appendChild(s);
+    });
+    sw.dataset.selected = PALETTE[0];
+    sw.dataset.built = '1';
+  }
+}
+document.getElementById('addCatBtn').onclick = async () => {
+  const name = document.getElementById('newCatName').value.trim();
+  if (!name) { showToast('分類名を入力してください'); return; }
+  const sw = document.getElementById('colorSwatches');
+  const color = sw.dataset.selected || PALETTE[0];
+  await catRef().push().set({name, color, active:true, order: categories.length});
+  document.getElementById('newCatName').value = '';
+  showToast('分類を追加しました');
+};
+function editCategory(c){
+  const name = prompt('分類名を編集', c.name);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  catRef(c.id).update({name: trimmed});
+}
+
+/* ---------- 一覧・月ナビ ---------- */
+function monthKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function monthLabelStr(d){ return `${d.getFullYear()}年${d.getMonth()+1}月`; }
+
+document.getElementById('prevMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth()-1); loadMonth(); };
+document.getElementById('nextMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth()+1); loadMonth(); };
+
+let monthListener = null;
+function loadMonth(){
+  document.getElementById('monthLabel').textContent = monthLabelStr(viewMonth);
+  const start = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1).toISOString().slice(0,10);
+  const endExclusive = new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1, 1);
+  endExclusive.setDate(endExclusive.getDate()-1);
+  const end = endExclusive.toISOString().slice(0,10);
+  if (monthListener) monthListener.off();
+  monthListener = recRef().orderByChild('date').startAt(start).endAt(end);
+  monthListener.on('value', snap => {
+    const val = snap.val() || {};
+    receipts = Object.entries(val)
+      .map(([id, v]) => ({id, ...v}))
+      .sort((a,b) => (a.date < b.date ? 1 : -1));
+    renderList();
+  }, err => { console.error(err); });
+}
+
+function renderList(){
+  const list = document.getElementById('receiptList');
+  list.innerHTML = '';
+  const filtered = activeFilterCat==='all' ? receipts : receipts.filter(r => r.categoryId === activeFilterCat);
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
+  let total = 0;
+  filtered.forEach(r => {
+    total += Number(r.amount)||0;
+    const cat = catById(r.categoryId);
+    const slip = document.createElement('div');
+    slip.className = 'slip';
+    slip.innerHTML = `
+      <div class="slip-row">
+        ${r.photoURL ? `<img class="slip-photo-thumb" src="${r.photoURL}">` : ''}
+        <div style="flex:1;">
+          <div class="slip-top">
+            <div>
+              <div class="slip-store">${escapeHtml(r.storeName||'（店舗未入力）')}</div>
+              <div class="slip-date">${r.date}</div>
+            </div>
+            <div class="slip-amount">¥${Number(r.amount||0).toLocaleString()}</div>
+          </div>
+          ${cat ? `<span class="stamp-tag" style="border-color:${cat.color}; color:${cat.color};">${escapeHtml(cat.name)}</span>` : ''}
+          ${r.memo ? `<div class="slip-memo">${escapeHtml(r.memo)}</div>` : ''}
+        </div>
+      </div>
+    `;
+    slip.onclick = () => openEditForm(r);
+    list.appendChild(slip);
+  });
+  document.getElementById('sumCount').textContent = filtered.length;
+  document.getElementById('sumAmount').textContent = '¥' + total.toLocaleString();
+}
+
+/* ---------- 登録・編集フォーム ---------- */
+document.getElementById('fabAdd').onclick = () => openNewForm();
+
+function openNewForm(){
+  editingId = null;
+  pendingPhotoFile = null; pendingPhotoDataUrl = null;
+  document.getElementById('formTitle').textContent = 'レシートを登録';
+  document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('fStore').value = '';
+  document.getElementById('fAmount').value = '';
+  document.getElementById('fMemo').value = '';
+  document.getElementById('photoPreview').style.display='none';
+  document.getElementById('photoZoneText').style.display='block';
+  document.getElementById('fCatPicker').dataset.selected = '';
+  document.querySelectorAll('#fCatPicker .cat-opt').forEach(o=>{o.classList.remove('sel'); o.style.background='#fff'; o.style.color=o.style.borderColor;});
+  document.getElementById('formDeleteRow').style.display='none';
+  showScreen('formScreen');
+}
+
+function openEditForm(r){
+  editingId = r.id;
+  pendingPhotoFile = null; pendingPhotoDataUrl = null;
+  document.getElementById('formTitle').textContent = 'レシートを編集';
+  document.getElementById('fDate').value = r.date;
+  document.getElementById('fStore').value = r.storeName||'';
+  document.getElementById('fAmount').value = r.amount||'';
+  document.getElementById('fMemo').value = r.memo||'';
+  const pv = document.getElementById('photoPreview');
+  if (r.photoURL){ pv.src = r.photoURL; pv.style.display='block'; document.getElementById('photoZoneText').style.display='none'; }
+  else { pv.style.display='none'; document.getElementById('photoZoneText').style.display='block'; }
+  document.querySelectorAll('#fCatPicker .cat-opt').forEach(o=>{
+    const sel = o.dataset.id === r.categoryId;
+    o.classList.toggle('sel', sel);
+    o.style.background = sel ? o.style.borderColor : '#fff';
+    o.style.color = sel ? '#fff' : o.style.borderColor;
+  });
+  document.getElementById('fCatPicker').dataset.selected = r.categoryId||'';
+  document.getElementById('formDeleteRow').style.display='flex';
+  showScreen('formScreen');
+}
+
+document.getElementById('photoInput').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  compressImageToDataUrl(file, 1000, 0.65).then(dataUrl => {
+    pendingPhotoDataUrl = dataUrl;
+    const pv = document.getElementById('photoPreview');
+    pv.src = pendingPhotoDataUrl; pv.style.display='block';
+    document.getElementById('photoZoneText').style.display='none';
+  }).catch(() => showToast('写真の読み込みに失敗しました'));
+};
+
+function compressImageToDataUrl(file, maxSize, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          if (width > height) { height = Math.round(height * maxSize / width); width = maxSize; }
+          else { width = Math.round(width * maxSize / height); height = maxSize; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = ev.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('formCancelBtn').onclick = () => showScreen('listScreen');
+
+document.getElementById('formSaveBtn').onclick = async () => {
+  const date = document.getElementById('fDate').value;
+  const storeName = document.getElementById('fStore').value.trim();
+  const amount = Number(document.getElementById('fAmount').value)||0;
+  const memo = document.getElementById('fMemo').value.trim();
+  const categoryId = document.getElementById('fCatPicker').dataset.selected;
+  if (!date){ showToast('購入日を入力してください'); return; }
+  if (!categoryId){ showToast('分類を選択してください'); return; }
+
+  const btn = document.getElementById('formSaveBtn');
+  btn.disabled = true; btn.textContent = '保存中…';
+
+  try {
+    let photoURL = null;
+    let recordRef;
+    if (editingId) {
+      recordRef = recRef(editingId);
+      const existing = receipts.find(r=>r.id===editingId) || {};
+      photoURL = existing.photoURL || null;
+    } else {
+      recordRef = recRef().push();
+    }
+    if (pendingPhotoDataUrl) {
+      photoURL = pendingPhotoDataUrl;
+    }
+    const existing = editingId ? (receipts.find(r=>r.id===editingId)||{}) : {};
+    await recordRef.set({
+      date, storeName, amount, memo, categoryId, photoURL: photoURL||null,
+      uid: currentUser.uid,
+      updatedAt: firebase.database.ServerValue.TIMESTAMP,
+      createdAt: existing.createdAt || firebase.database.ServerValue.TIMESTAMP
+    });
+    showToast('保存しました');
+    showScreen('listScreen');
+    loadMonth();
+  } catch(e) {
+    console.error(e);
+    showToast('保存に失敗しました');
+  } finally {
+    btn.disabled = false; btn.textContent = '保存する';
+  }
+};
+
+document.getElementById('formDeleteBtn').onclick = async () => {
+  if (!editingId) return;
+  if (!confirm('この記録を削除しますか？')) return;
+  await recRef(editingId).remove();
+  showToast('削除しました');
+  showScreen('listScreen');
+};
+
+/* ---------- 集計（月別×分類 クロス集計） ---------- */
+document.getElementById('prevYear').onclick = () => { viewYear--; loadYear(); };
+document.getElementById('nextYear').onclick = () => { viewYear++; loadYear(); };
+
+let yearListener = null;
+function loadYear(){
+  document.getElementById('yearLabel').textContent = `${viewYear}年`;
+  const start = `${viewYear}-01-01`;
+  const end = `${viewYear}-12-31`;
+  if (yearListener) yearListener.off();
+  yearListener = recRef().orderByChild('date').startAt(start).endAt(end);
+  yearListener.on('value', snap => {
+    const val = snap.val() || {};
+    allYearReceipts = Object.entries(val).map(([id, v]) => ({id, ...v}));
+    renderAgg();
+  });
+}
+
+function renderAgg(){
+  const table = document.getElementById('aggTable');
+  if (!categories.length) { table.innerHTML=''; return; }
+  const activeCats = categories.filter(c=>c.active || allYearReceipts.some(r=>r.categoryId===c.id));
+  const monthTotals = Array.from({length:12}, () => ({}));
+  const catYearTotal = {};
+  activeCats.forEach(c => catYearTotal[c.id]=0);
+  let grandTotal = 0;
+
+  allYearReceipts.forEach(r => {
+    const m = new Date(r.date).getMonth();
+    const amt = Number(r.amount)||0;
+    monthTotals[m][r.categoryId] = (monthTotals[m][r.categoryId]||0) + amt;
+    if (catYearTotal[r.categoryId]!==undefined) catYearTotal[r.categoryId]+=amt;
+    grandTotal += amt;
+  });
+
+  let html = '<thead><tr><th>月＼分類</th>';
+  activeCats.forEach(c => html += `<th class="num">${escapeHtml(c.name)}</th>`);
+  html += '<th class="num">合計</th></tr></thead><tbody>';
+
+  for (let m=0; m<12; m++){
+    let rowTotal = 0;
+    html += `<tr><td>${m+1}月</td>`;
+    activeCats.forEach(c => {
+      const v = monthTotals[m][c.id]||0;
+      rowTotal += v;
+      html += `<td class="num" data-month="${m}" data-cat="${c.id}">${v ? v.toLocaleString() : '－'}</td>`;
+    });
+    html += `<td class="num total-col">${rowTotal ? rowTotal.toLocaleString() : '－'}</td></tr>`;
+  }
+  html += `<tr class="total-row"><td>合計</td>`;
+  activeCats.forEach(c => html += `<td class="num">${(catYearTotal[c.id]||0).toLocaleString()}</td>`);
+  html += `<td class="num">${grandTotal.toLocaleString()}</td></tr>`;
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  table.querySelectorAll('td[data-month]').forEach(td => {
+    td.style.cursor='pointer';
+    td.onclick = () => {
+      viewMonth = new Date(viewYear, Number(td.dataset.month), 1);
+      activeFilterCat = td.dataset.cat;
+      renderCatFilterBar();
+      loadMonth();
+      showScreen('listScreen');
+    };
+  });
+}
+
+/* ---------- 画面遷移 ---------- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen===id));
+  const titles = {listScreen:'レシート一覧', formScreen:'', aggScreen:'集計', adminScreen:'分類の管理'};
+  if (titles[id]) document.getElementById('headerTitle').textContent = titles[id];
+  if (id==='aggScreen') loadYear();
+}
+document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => showScreen(b.dataset.screen));
+
+/* ---------- ユーティリティ ---------- */
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
