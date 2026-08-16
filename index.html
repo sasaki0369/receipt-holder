@@ -382,8 +382,16 @@ table.agg td.total-col{font-weight:700;}
 
       <h2 class="section-title" style="margin-top:26px;">AI自動入力の設定</h2>
       <div class="form-card">
-        <p class="hint" style="margin-top:0;">Claude APIキーはこの端末のブラウザ内にのみ保存されます。キーを変更・削除したい場合はこちらから行ってください。</p>
-        <button class="btn btn-ghost" id="resetApiKeyBtn" style="width:100%;">APIキーを再設定する</button>
+        <p class="hint" style="margin-top:0;">Claude APIキーはこの端末のブラウザ内にのみ保存されます（GitHubには送信されません）。</p>
+        <div class="field">
+          <label>Claude APIキー</label>
+          <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+        </div>
+        <div id="apiKeyStatus" class="hint" style="margin-top:-4px;"></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="deleteApiKeyBtn">削除</button>
+          <button class="btn btn-primary" id="saveApiKeyBtn">保存</button>
+        </div>
       </div>
     </section>
   </main>
@@ -719,19 +727,41 @@ function compressImageToDataUrl(file, maxSize, quality){
 const API_KEY_STORAGE = 'receiptHolder_claudeApiKey';
 
 function getStoredApiKey(){
-  let key = localStorage.getItem(API_KEY_STORAGE);
-  if (!key) {
-    key = prompt('AI自動入力を使うにはClaude APIキーが必要です。\nAnthropic Console（console.anthropic.com）で発行したキー（sk-ant-...）を入力してください。\n※この端末のブラウザ内にのみ保存され、GitHubには送信されません。');
-    if (key) { key = key.trim(); localStorage.setItem(API_KEY_STORAGE, key); }
-  }
-  return key;
+  return localStorage.getItem(API_KEY_STORAGE);
 }
+
+function renderApiKeyStatus(){
+  const status = document.getElementById('apiKeyStatus');
+  const key = getStoredApiKey();
+  if (key) {
+    status.textContent = `設定済み（${key.slice(0,10)}…）`;
+  } else {
+    status.textContent = '未設定：AI自動入力を使うには保存してください';
+  }
+}
+
+document.getElementById('saveApiKeyBtn').onclick = () => {
+  const input = document.getElementById('apiKeyInput');
+  const val = input.value.trim();
+  if (!val) { showToast('APIキーを入力してください'); return; }
+  localStorage.setItem(API_KEY_STORAGE, val);
+  input.value = '';
+  renderApiKeyStatus();
+  showToast('APIキーを保存しました');
+};
+
+document.getElementById('deleteApiKeyBtn').onclick = () => {
+  localStorage.removeItem(API_KEY_STORAGE);
+  document.getElementById('apiKeyInput').value = '';
+  renderApiKeyStatus();
+  showToast('APIキーを削除しました');
+};
 
 document.getElementById('aiReadBtn').onclick = async () => {
   const src = pendingPhotoDataUrl || document.getElementById('photoPreview').src;
   if (!src || !src.startsWith('data:')) { showToast('写真がありません'); return; }
   const apiKey = getStoredApiKey();
-  if (!apiKey) { showToast('APIキーが未設定のため中止しました'); return; }
+  if (!apiKey) { showToast('先に「管理」画面でAPIキーを設定してください'); return; }
   const btn = document.getElementById('aiReadBtn');
   const originalText = btn.textContent;
   btn.disabled = true; btn.textContent = '読み取り中…';
@@ -745,8 +775,7 @@ document.getElementById('aiReadBtn').onclick = async () => {
   } catch(e) {
     console.error(e);
     if (String(e.message||'').includes('401')) {
-      localStorage.removeItem(API_KEY_STORAGE);
-      showToast('APIキーが無効です。もう一度お試しください');
+      showToast('APIキーが無効です。管理画面で設定し直してください');
     } else {
       showToast('読み取りに失敗しました。手入力してください');
     }
@@ -793,11 +822,6 @@ async function recognizeReceiptImage(dataUrl, apiKey){
   if (parsed.storeName === 'null') parsed.storeName = null;
   return parsed;
 }
-
-document.getElementById('resetApiKeyBtn').onclick = () => {
-  localStorage.removeItem(API_KEY_STORAGE);
-  showToast('APIキーを削除しました。次回AI読み取り時に再入力してください');
-};
 
 document.getElementById('formCancelBtn').onclick = () => showScreen('listScreen');
 
@@ -927,6 +951,7 @@ function showScreen(id){
   const titles = {listScreen:'レシート一覧', formScreen:'', aggScreen:'集計', adminScreen:'分類の管理'};
   if (titles[id]) document.getElementById('headerTitle').textContent = titles[id];
   if (id==='aggScreen') loadYear();
+  if (id==='adminScreen') renderApiKeyStatus();
 }
 document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => showScreen(b.dataset.screen));
 
