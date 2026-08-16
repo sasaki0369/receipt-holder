@@ -299,6 +299,7 @@ table.agg td.total-col{font-weight:700;}
         <div><div class="lbl">合計金額</div><div class="val" id="sumAmount">¥0</div></div>
       </div>
       <div class="filter-bar" id="catFilterBar"></div>
+      <div class="filter-bar" id="settlementFilterBar"></div>
       <div id="receiptList"></div>
       <div id="emptyState" class="empty" style="display:none;">
         <div class="mark-big" style="width:56px;height:56px;font-size:11px;">記録<br>なし</div>
@@ -334,6 +335,10 @@ table.agg td.total-col{font-weight:700;}
         <div class="field">
           <label>分類</label>
           <div class="cat-picker" id="fCatPicker"></div>
+        </div>
+        <div class="field">
+          <label>精算状況</label>
+          <div class="cat-picker" id="fSettlementPicker"></div>
         </div>
         <div class="field">
           <label>メモ</label>
@@ -449,6 +454,14 @@ let pendingPhotoDataUrl = null;
 
 const PALETTE = ['#B4432C','#2E5E7C','#7A8450','#9C6B3E','#7D5A8C','#3E7C6B','#B47C2C','#5E6B7C'];
 
+const SETTLEMENT_STATUSES = [
+  { id:'unsettled', name:'未精算', color:'#B4432C' },
+  { id:'settled',   name:'精算済み', color:'#3E7C6B' },
+  { id:'not_needed', name:'精算不要', color:'#8A7F6E' }
+];
+function settlementById(id){ return SETTLEMENT_STATUSES.find(s=>s.id===id) || SETTLEMENT_STATUSES[0]; }
+let activeFilterSettlement = 'all';
+
 /* ---------- 認証 ---------- */
 document.getElementById('googleLoginBtn').onclick = () => {
   const provider = new firebase.auth.GoogleAuthProvider();
@@ -465,6 +478,8 @@ auth.onAuthStateChanged(async user => {
     document.getElementById('userPhoto').src = user.photoURL || '';
     await ensureDefaultCategories();
     listenCategories();
+    renderSettlementFilterBar();
+    renderSettlementPicker();
     loadMonth();
   } else {
     currentUser = null;
@@ -539,7 +554,43 @@ function renderCatPicker(){
   });
 }
 
-/* ---- 分類 管理画面 ---- */
+function renderSettlementFilterBar(){
+  const bar = document.getElementById('settlementFilterBar');
+  bar.innerHTML = '';
+  const allChip = document.createElement('button');
+  allChip.className = 'chip' + (activeFilterSettlement==='all' ? ' active':'');
+  allChip.textContent = 'すべての精算状況';
+  allChip.onclick = () => { activeFilterSettlement='all'; renderSettlementFilterBar(); renderList(); };
+  bar.appendChild(allChip);
+  SETTLEMENT_STATUSES.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (activeFilterSettlement===s.id ? ' active':'');
+    chip.textContent = s.name;
+    chip.onclick = () => { activeFilterSettlement=s.id; renderSettlementFilterBar(); renderList(); };
+    bar.appendChild(chip);
+  });
+}
+
+function renderSettlementPicker(){
+  const wrap = document.getElementById('fSettlementPicker');
+  wrap.innerHTML = '';
+  SETTLEMENT_STATUSES.forEach(s => {
+    const b = document.createElement('button');
+    b.type='button';
+    b.className='cat-opt';
+    b.textContent = s.name;
+    b.dataset.id = s.id;
+    b.style.borderColor = s.color;
+    b.onclick = () => {
+      wrap.querySelectorAll('.cat-opt').forEach(o=>{o.classList.remove('sel'); o.style.background='#fff'; o.style.color=o.style.borderColor;});
+      b.classList.add('sel'); b.style.background = s.color; b.style.color = '#fff';
+      wrap.dataset.selected = s.id;
+    };
+    wrap.appendChild(b);
+  });
+}
+
+
 function renderCatAdmin(){
   const list = document.getElementById('catAdminList');
   list.innerHTML = '';
@@ -614,12 +665,14 @@ function loadMonth(){
 function renderList(){
   const list = document.getElementById('receiptList');
   list.innerHTML = '';
-  const filtered = activeFilterCat==='all' ? receipts : receipts.filter(r => r.categoryId === activeFilterCat);
+  let filtered = activeFilterCat==='all' ? receipts : receipts.filter(r => r.categoryId === activeFilterCat);
+  filtered = activeFilterSettlement==='all' ? filtered : filtered.filter(r => (r.settlement||'unsettled') === activeFilterSettlement);
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   let total = 0;
   filtered.forEach(r => {
     total += Number(r.amount)||0;
     const cat = catById(r.categoryId);
+    const st = settlementById(r.settlement||'unsettled');
     const slip = document.createElement('div');
     slip.className = 'slip';
     slip.innerHTML = `
@@ -633,7 +686,10 @@ function renderList(){
             </div>
             <div class="slip-amount">¥${Number(r.amount||0).toLocaleString()}</div>
           </div>
-          ${cat ? `<span class="stamp-tag" style="border-color:${cat.color}; color:${cat.color};">${escapeHtml(cat.name)}</span>` : ''}
+          <div>
+            ${cat ? `<span class="stamp-tag" style="border-color:${cat.color}; color:${cat.color};">${escapeHtml(cat.name)}</span>` : ''}
+            <span class="stamp-tag" style="border-color:${st.color}; color:${st.color};">${escapeHtml(st.name)}</span>
+          </div>
           ${r.memo ? `<div class="slip-memo">${escapeHtml(r.memo)}</div>` : ''}
         </div>
       </div>
@@ -661,6 +717,7 @@ function openNewForm(){
   document.getElementById('aiReadBtn').style.display='none';
   document.getElementById('fCatPicker').dataset.selected = '';
   document.querySelectorAll('#fCatPicker .cat-opt').forEach(o=>{o.classList.remove('sel'); o.style.background='#fff'; o.style.color=o.style.borderColor;});
+  selectSettlementOption('unsettled');
   document.getElementById('formDeleteRow').style.display='none';
   showScreen('formScreen');
 }
@@ -683,8 +740,20 @@ function openEditForm(r){
     o.style.color = sel ? '#fff' : o.style.borderColor;
   });
   document.getElementById('fCatPicker').dataset.selected = r.categoryId||'';
+  selectSettlementOption(r.settlement||'unsettled');
   document.getElementById('formDeleteRow').style.display='flex';
   showScreen('formScreen');
+}
+
+function selectSettlementOption(id){
+  const wrap = document.getElementById('fSettlementPicker');
+  wrap.dataset.selected = id;
+  wrap.querySelectorAll('.cat-opt').forEach(o=>{
+    const sel = o.dataset.id === id;
+    o.classList.toggle('sel', sel);
+    o.style.background = sel ? o.style.borderColor : '#fff';
+    o.style.color = sel ? '#fff' : o.style.borderColor;
+  });
 }
 
 document.getElementById('photoInput').onchange = (e) => {
@@ -831,6 +900,7 @@ document.getElementById('formSaveBtn').onclick = async () => {
   const amount = Number(document.getElementById('fAmount').value)||0;
   const memo = document.getElementById('fMemo').value.trim();
   const categoryId = document.getElementById('fCatPicker').dataset.selected;
+  const settlement = document.getElementById('fSettlementPicker').dataset.selected || 'unsettled';
   if (!date){ showToast('購入日を入力してください'); return; }
   if (!categoryId){ showToast('分類を選択してください'); return; }
 
@@ -852,7 +922,7 @@ document.getElementById('formSaveBtn').onclick = async () => {
     }
     const existing = editingId ? (receipts.find(r=>r.id===editingId)||{}) : {};
     await recordRef.set({
-      date, storeName, amount, memo, categoryId, photoURL: photoURL||null,
+      date, storeName, amount, memo, categoryId, settlement, photoURL: photoURL||null,
       uid: currentUser.uid,
       updatedAt: firebase.database.ServerValue.TIMESTAMP,
       createdAt: existing.createdAt || firebase.database.ServerValue.TIMESTAMP
