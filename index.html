@@ -317,6 +317,7 @@ table.agg td.total-col{font-weight:700;}
             <img id="photoPreview" style="display:none;">
             <input type="file" id="photoInput" accept="image/*" capture="environment">
           </div>
+          <button type="button" class="btn btn-ghost" id="aiReadBtn" style="width:100%; margin-top:8px; display:none;">✨ AIで写真から自動入力</button>
         </div>
         <div class="field">
           <label>購入日</label>
@@ -643,6 +644,7 @@ function openNewForm(){
   document.getElementById('fMemo').value = '';
   document.getElementById('photoPreview').style.display='none';
   document.getElementById('photoZoneText').style.display='block';
+  document.getElementById('aiReadBtn').style.display='none';
   document.getElementById('fCatPicker').dataset.selected = '';
   document.querySelectorAll('#fCatPicker .cat-opt').forEach(o=>{o.classList.remove('sel'); o.style.background='#fff'; o.style.color=o.style.borderColor;});
   document.getElementById('formDeleteRow').style.display='none';
@@ -658,8 +660,8 @@ function openEditForm(r){
   document.getElementById('fAmount').value = r.amount||'';
   document.getElementById('fMemo').value = r.memo||'';
   const pv = document.getElementById('photoPreview');
-  if (r.photoURL){ pv.src = r.photoURL; pv.style.display='block'; document.getElementById('photoZoneText').style.display='none'; }
-  else { pv.style.display='none'; document.getElementById('photoZoneText').style.display='block'; }
+  if (r.photoURL){ pv.src = r.photoURL; pv.style.display='block'; document.getElementById('photoZoneText').style.display='none'; document.getElementById('aiReadBtn').style.display='block'; }
+  else { pv.style.display='none'; document.getElementById('photoZoneText').style.display='block'; document.getElementById('aiReadBtn').style.display='none'; }
   document.querySelectorAll('#fCatPicker .cat-opt').forEach(o=>{
     const sel = o.dataset.id === r.categoryId;
     o.classList.toggle('sel', sel);
@@ -679,6 +681,7 @@ document.getElementById('photoInput').onchange = (e) => {
     const pv = document.getElementById('photoPreview');
     pv.src = pendingPhotoDataUrl; pv.style.display='block';
     document.getElementById('photoZoneText').style.display='none';
+    document.getElementById('aiReadBtn').style.display='block';
   }).catch(() => showToast('写真の読み込みに失敗しました'));
 };
 
@@ -704,6 +707,59 @@ function compressImageToDataUrl(file, maxSize, quality){
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/* ---------- AIによるレシート自動読み取り ---------- */
+document.getElementById('aiReadBtn').onclick = async () => {
+  const src = pendingPhotoDataUrl || document.getElementById('photoPreview').src;
+  if (!src || !src.startsWith('data:')) { showToast('写真がありません'); return; }
+  const btn = document.getElementById('aiReadBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = '読み取り中…';
+  try {
+    const result = await recognizeReceiptImage(src);
+    if (result.date) document.getElementById('fDate').value = result.date;
+    if (result.storeName) document.getElementById('fStore').value = result.storeName;
+    if (result.amount) document.getElementById('fAmount').value = result.amount;
+    if (result.memo) document.getElementById('fMemo').value = result.memo;
+    showToast('内容を読み取りました。確認して保存してください');
+  } catch(e) {
+    console.error(e);
+    showToast('読み取りに失敗しました。手入力してください');
+  } finally {
+    btn.disabled = false; btn.textContent = originalText;
+  }
+};
+
+async function recognizeReceiptImage(dataUrl){
+  const commaIdx = dataUrl.indexOf(',');
+  const meta = dataUrl.slice(5, commaIdx); // 例: image/jpeg;base64
+  const mediaType = meta.split(';')[0] || 'image/jpeg';
+  const base64 = dataUrl.slice(commaIdx + 1);
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      system: "あなたはレシート・領収書の画像から情報を抽出するアシスタントです。出力はJSONオブジェクトのみとし、前後の説明文やコードブロック記号(```)は一切付けないでください。",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: "この画像のレシート・領収書から以下の情報を読み取り、次の形式のJSONのみで出力してください。\n{\"date\":\"YYYY-MM-DD形式。不明な場合はnull\",\"storeName\":\"店舗名・支払先。不明な場合はnull\",\"amount\":税込合計金額を数値のみで（不明な場合は0）,\"memo\":\"購入した品目や内容の簡潔なメモ（20文字程度）\"}\n和暦や省略された日付表記は西暦のYYYY-MM-DDに変換してください。" }
+        ]
+      }]
+    })
+  });
+  const data = await response.json();
+  const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  const cleaned = textBlocks.replace(/```json|```/g, '').trim();
+  const parsed = JSON.parse(cleaned);
+  if (parsed.date === 'null') parsed.date = null;
+  if (parsed.storeName === 'null') parsed.storeName = null;
+  return parsed;
 }
 
 document.getElementById('formCancelBtn').onclick = () => showScreen('listScreen');
