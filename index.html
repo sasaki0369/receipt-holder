@@ -341,6 +341,11 @@ table.agg td.total-col{font-weight:700;}
           <div class="cat-picker" id="fSettlementPicker"></div>
         </div>
         <div class="field">
+          <label>原本の保管場所</label>
+          <div class="filter-bar" id="fStorageLocationChips" style="padding-bottom:8px;"></div>
+          <input type="text" id="fStorageLocation" placeholder="例）経理ファイルA、机の引き出し など">
+        </div>
+        <div class="field">
           <label>メモ</label>
           <textarea id="fMemo" placeholder="用途、品目、経費申請メモなど"></textarea>
         </div>
@@ -461,6 +466,7 @@ const SETTLEMENT_STATUSES = [
 ];
 function settlementById(id){ return SETTLEMENT_STATUSES.find(s=>s.id===id) || SETTLEMENT_STATUSES[0]; }
 let activeFilterSettlement = 'all';
+let storageLocations = []; // {id,name} 保管場所タグ（自由記述の蓄積）
 
 /* ---------- 認証 ---------- */
 document.getElementById('googleLoginBtn').onclick = () => {
@@ -478,6 +484,7 @@ auth.onAuthStateChanged(async user => {
     document.getElementById('userPhoto').src = user.photoURL || '';
     await ensureDefaultCategories();
     listenCategories();
+    listenStorageLocations();
     renderSettlementFilterBar();
     renderSettlementPicker();
     loadMonth();
@@ -492,6 +499,7 @@ auth.onAuthStateChanged(async user => {
 /* ---------- 分類（管理画面で追加・修正可能） ---------- */
 function catRef(id){ return id ? db.ref(`${ROOT}/categories/${id}`) : db.ref(`${ROOT}/categories`); }
 function recRef(id){ return id ? db.ref(`${ROOT}/receipts/${id}`) : db.ref(`${ROOT}/receipts`); }
+function storageLocRef(id){ return id ? db.ref(`${ROOT}/storageLocations/${id}`) : db.ref(`${ROOT}/storageLocations`); }
 
 async function ensureDefaultCategories(){
   const snap = await catRef().get();
@@ -517,6 +525,43 @@ function listenCategories(){
 }
 
 function catById(id){ return categories.find(c => c.id === id); }
+
+/* ---------- 保管場所タグ（自由記述で入力するたびに蓄積） ---------- */
+function listenStorageLocations(){
+  storageLocRef().on('value', snap => {
+    const val = snap.val() || {};
+    storageLocations = Object.entries(val)
+      .map(([id, v]) => ({id, ...v}))
+      .sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ja'));
+    renderStorageLocationChips();
+  });
+}
+
+async function ensureStorageLocationTag(name){
+  const trimmed = (name||'').trim();
+  if (!trimmed) return;
+  const exists = storageLocations.some(l => l.name === trimmed);
+  if (!exists) {
+    await storageLocRef().push().set({ name: trimmed });
+  }
+}
+
+function renderStorageLocationChips(){
+  const wrap = document.getElementById('fStorageLocationChips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  storageLocations.forEach(loc => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = loc.name;
+    chip.onclick = () => { document.getElementById('fStorageLocation').value = loc.name; };
+    wrap.appendChild(chip);
+  });
+  if (!storageLocations.length) {
+    wrap.innerHTML = '<span class="hint" style="margin-top:0;">まだ保管場所のタグがありません。下の欄に入力すると次回から選択できるようになります。</span>';
+  }
+}
 
 function renderCatFilterBar(){
   const bar = document.getElementById('catFilterBar');
@@ -691,6 +736,7 @@ function renderList(){
             <span class="stamp-tag" style="border-color:${st.color}; color:${st.color};">${escapeHtml(st.name)}</span>
           </div>
           ${r.memo ? `<div class="slip-memo">${escapeHtml(r.memo)}</div>` : ''}
+          ${r.storageLocation ? `<div class="slip-memo">📎 保管場所：${escapeHtml(r.storageLocation)}</div>` : ''}
         </div>
       </div>
     `;
@@ -712,6 +758,7 @@ function openNewForm(){
   document.getElementById('fStore').value = '';
   document.getElementById('fAmount').value = '';
   document.getElementById('fMemo').value = '';
+  document.getElementById('fStorageLocation').value = '';
   document.getElementById('photoPreview').style.display='none';
   document.getElementById('photoZoneText').style.display='block';
   document.getElementById('aiReadBtn').style.display='none';
@@ -730,6 +777,7 @@ function openEditForm(r){
   document.getElementById('fStore').value = r.storeName||'';
   document.getElementById('fAmount').value = r.amount||'';
   document.getElementById('fMemo').value = r.memo||'';
+  document.getElementById('fStorageLocation').value = r.storageLocation||'';
   const pv = document.getElementById('photoPreview');
   if (r.photoURL){ pv.src = r.photoURL; pv.style.display='block'; document.getElementById('photoZoneText').style.display='none'; document.getElementById('aiReadBtn').style.display='block'; }
   else { pv.style.display='none'; document.getElementById('photoZoneText').style.display='block'; document.getElementById('aiReadBtn').style.display='none'; }
@@ -765,6 +813,11 @@ document.getElementById('photoInput').onchange = (e) => {
     pv.src = pendingPhotoDataUrl; pv.style.display='block';
     document.getElementById('photoZoneText').style.display='none';
     document.getElementById('aiReadBtn').style.display='block';
+    if (getStoredApiKey()) {
+      runAiRecognition(pendingPhotoDataUrl);
+    } else {
+      showToast('APIキーを設定すると撮影時に自動でAI読み取りされます');
+    }
   }).catch(() => showToast('写真の読み込みに失敗しました'));
 };
 
@@ -826,14 +879,13 @@ document.getElementById('deleteApiKeyBtn').onclick = () => {
   showToast('APIキーを削除しました');
 };
 
-document.getElementById('aiReadBtn').onclick = async () => {
-  const src = pendingPhotoDataUrl || document.getElementById('photoPreview').src;
+async function runAiRecognition(src){
   if (!src || !src.startsWith('data:')) { showToast('写真がありません'); return; }
   const apiKey = getStoredApiKey();
   if (!apiKey) { showToast('先に「管理」画面でAPIキーを設定してください'); return; }
   const btn = document.getElementById('aiReadBtn');
   const originalText = btn.textContent;
-  btn.disabled = true; btn.textContent = '読み取り中…';
+  btn.disabled = true; btn.textContent = 'AIが読み取り中…';
   try {
     const result = await recognizeReceiptImage(src, apiKey);
     if (result.date) document.getElementById('fDate').value = result.date;
@@ -851,6 +903,11 @@ document.getElementById('aiReadBtn').onclick = async () => {
   } finally {
     btn.disabled = false; btn.textContent = originalText;
   }
+}
+
+document.getElementById('aiReadBtn').onclick = () => {
+  const src = pendingPhotoDataUrl || document.getElementById('photoPreview').src;
+  runAiRecognition(src);
 };
 
 async function recognizeReceiptImage(dataUrl, apiKey){
@@ -901,6 +958,7 @@ document.getElementById('formSaveBtn').onclick = async () => {
   const memo = document.getElementById('fMemo').value.trim();
   const categoryId = document.getElementById('fCatPicker').dataset.selected;
   const settlement = document.getElementById('fSettlementPicker').dataset.selected || 'unsettled';
+  const storageLocation = document.getElementById('fStorageLocation').value.trim();
   if (!date){ showToast('購入日を入力してください'); return; }
   if (!categoryId){ showToast('分類を選択してください'); return; }
 
@@ -922,11 +980,12 @@ document.getElementById('formSaveBtn').onclick = async () => {
     }
     const existing = editingId ? (receipts.find(r=>r.id===editingId)||{}) : {};
     await recordRef.set({
-      date, storeName, amount, memo, categoryId, settlement, photoURL: photoURL||null,
+      date, storeName, amount, memo, categoryId, settlement, storageLocation, photoURL: photoURL||null,
       uid: currentUser.uid,
       updatedAt: firebase.database.ServerValue.TIMESTAMP,
       createdAt: existing.createdAt || firebase.database.ServerValue.TIMESTAMP
     });
+    if (storageLocation) await ensureStorageLocationTag(storageLocation);
     showToast('保存しました');
     showScreen('listScreen');
     loadMonth();
