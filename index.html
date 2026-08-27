@@ -314,10 +314,15 @@ table.agg td.total-col{font-weight:700;}
         <div class="field">
           <label>写真</label>
           <div class="photo-zone" id="photoZone">
-            <span id="photoZoneText">タップして撮影・選択</span>
+            <span id="photoZoneText">まだ写真がありません</span>
             <img id="photoPreview" style="display:none;">
-            <input type="file" id="photoInput" accept="image/*" capture="environment">
           </div>
+          <div class="btn-row" style="margin-top:8px;">
+            <button type="button" class="btn btn-ghost" id="cameraBtn">📷 撮影する</button>
+            <button type="button" class="btn btn-ghost" id="fileBtn">🖼️ ファイルから選ぶ</button>
+          </div>
+          <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
+          <input type="file" id="fileInput" accept="image/*" style="display:none;">
           <button type="button" class="btn btn-ghost" id="aiReadBtn" style="width:100%; margin-top:8px; display:none;">✨ AIで写真から自動入力</button>
         </div>
         <div class="field">
@@ -804,8 +809,12 @@ function selectSettlementOption(id){
   });
 }
 
-document.getElementById('photoInput').onchange = (e) => {
-  const file = e.target.files[0];
+document.getElementById('cameraBtn').onclick = () => document.getElementById('cameraInput').click();
+document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('cameraInput').onchange = (e) => handlePhotoFile(e.target.files[0]);
+document.getElementById('fileInput').onchange = (e) => handlePhotoFile(e.target.files[0]);
+
+function handlePhotoFile(file){
   if (!file) return;
   compressImageToDataUrl(file, 1000, 0.65).then(dataUrl => {
     pendingPhotoDataUrl = dataUrl;
@@ -819,7 +828,7 @@ document.getElementById('photoInput').onchange = (e) => {
       showToast('APIキーを設定すると撮影時に自動でAI読み取りされます');
     }
   }).catch(() => showToast('写真の読み込みに失敗しました'));
-};
+}
 
 function compressImageToDataUrl(file, maxSize, quality){
   return new Promise((resolve, reject) => {
