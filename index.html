@@ -289,7 +289,11 @@ table.agg td.total-col{font-weight:700;}
   <main>
     <!-- 一覧 -->
     <section id="listScreen" class="screen active">
-      <div class="month-nav">
+      <div class="filter-bar" id="viewModeBar" style="padding-bottom:10px;">
+        <button class="chip active" id="modeMonthBtn">月別</button>
+        <button class="chip" id="modeUnsettledBtn">⚠ 未精算のみ（全期間）</button>
+      </div>
+      <div class="month-nav" id="monthNav">
         <button id="prevMonth">‹</button>
         <div class="m-label" id="monthLabel">2026年8月</div>
         <button id="nextMonth">›</button>
@@ -694,7 +698,30 @@ function monthLabelStr(d){ return `${d.getFullYear()}年${d.getMonth()+1}月`; }
 document.getElementById('prevMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth()-1); loadMonth(); };
 document.getElementById('nextMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth()+1); loadMonth(); };
 
+let listMode = 'month'; // 'month' | 'unsettledAll'
 let monthListener = null;
+let unsettledListener = null;
+
+document.getElementById('modeMonthBtn').onclick = () => switchListMode('month');
+document.getElementById('modeUnsettledBtn').onclick = () => switchListMode('unsettledAll');
+
+function switchListMode(mode){
+  listMode = mode;
+  document.getElementById('modeMonthBtn').classList.toggle('active', mode==='month');
+  document.getElementById('modeUnsettledBtn').classList.toggle('active', mode==='unsettledAll');
+  document.getElementById('monthNav').style.display = mode==='month' ? 'flex' : 'none';
+  document.getElementById('settlementFilterBar').style.display = mode==='month' ? 'flex' : 'none';
+  if (mode==='month') {
+    if (unsettledListener) { unsettledListener.off(); unsettledListener = null; }
+    activeFilterSettlement = 'all';
+    renderSettlementFilterBar();
+    loadMonth();
+  } else {
+    if (monthListener) { monthListener.off(); monthListener = null; }
+    loadUnsettledAll();
+  }
+}
+
 function loadMonth(){
   document.getElementById('monthLabel').textContent = monthLabelStr(viewMonth);
   const start = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1).toISOString().slice(0,10);
@@ -710,6 +737,19 @@ function loadMonth(){
       .sort((a,b) => (a.date < b.date ? 1 : -1));
     renderList();
   }, err => { console.error(err); });
+}
+
+function loadUnsettledAll(){
+  activeFilterSettlement = 'unsettled';
+  if (unsettledListener) unsettledListener.off();
+  unsettledListener = recRef().orderByChild('settlement').equalTo('unsettled');
+  unsettledListener.on('value', snap => {
+    const val = snap.val() || {};
+    receipts = Object.entries(val)
+      .map(([id, v]) => ({id, ...v}))
+      .sort((a,b) => (a.date < b.date ? 1 : -1));
+    renderList();
+  }, err => { console.error(err); showToast('取得に失敗しました'); });
 }
 
 function renderList(){
